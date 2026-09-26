@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cash Manager</title>
+<meta name="description" content="Offline-first cash denomination and inventory manager">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F5132">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+/* ===================== DESIGN TOKENS ===================== */
+:root{
+  --ink:#182420;
+  --ink-soft:#4B5A54;
+  --paper:#F6F5F1;
+  --surface:#FFFFFF;
+  --surface-2:#EFEEE8;
+  --line:#E1DFD6;
+  --primary:#0F5132;
+  --primary-ink:#FFFFFF;
+  --primary-soft:#E4EFE8;
+  --gold:#B8912E;
+  --gold-soft:#F6EEDA;
+  --danger:#B3261E;
+  --danger-soft:#FBE9E7;
+  --success:#1B7F4C;
+  --radius-s:10px;
+  --radius-m:16px;
+  --radius-l:22px;
+  --shadow:0 1px 2px rgba(24,36,32,.06), 0 8px 24px -12px rgba(24,36,32,.18);
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans","Helvetica Neue",Arial,sans-serif;
+  --font-bn:"Noto Sans Bengali",var(--font);
+}
+:root[data-theme="dark"]{
+  --ink:#EDEFEC;
+  --ink-soft:#AEB8B2;
+  --paper:#12160F;
+  --surface:#1B211C;
+  --surface-2:#232A24;
+  --line:#2C342E;
+  --primary:#3FAE7A;
+  --primary-ink:#0A130E;
+  --primary-soft:#183226;
+  --gold:#E0C15B;
+  --gold-soft:#33301A;
+  --danger:#FF8A80;
+  --danger-soft:#3A1F1C;
+  --success:#5FCB93;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;font-family:var(--font);color:var(--ink);background:var(--paper);
+  -webkit-font-smoothing:antialiased;padding-top:var(--safe-t);padding-bottom:var(--safe-b);
+  min-height:100dvh;
+}
+html[lang="bn"] body{font-family:var(--font-bn)}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em}
+p{margin:0}
+button{font-family:inherit}
+a{color:inherit}
+.num{font-variant-numeric:tabular-nums}
+::selection{background:var(--primary-soft)}
+:focus-visible{outline:2.5px solid var(--primary);outline-offset:2px;border-radius:6px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
+
+/* ===================== SPLASH ===================== */
+#splash{
+  position:fixed;inset:0;background:linear-gradient(160deg,var(--primary) 0%,#0A3A24 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;z-index:999;
+  transition:opacity .5s ease, visibility .5s ease;
+}
+#splash.hide{opacity:0;visibility:hidden;pointer-events:none}
+.splash-mark{width:88px;height:88px;border-radius:24px;background:rgba(255,255,255,.12);
+  display:flex;align-items:center;justify-content:center;margin-bottom:18px;
+  animation:pop .7s cubic-bezier(.2,1.4,.4,1);}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.splash-title{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.splash-tag{font-size:14px;opacity:.8;margin-top:6px}
+.splash-loader{margin-top:28px;width:120px;height:3px;background:rgba(255,255,255,.25);border-radius:2px;overflow:hidden}
+.splash-loader>span{display:block;height:100%;width:40%;background:#fff;border-radius:2px;animation:load 1.1s ease-in-out infinite}
+@keyframes load{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+
+/* ===================== APP SHELL ===================== */
+#app{min-height:100dvh;display:flex;flex-direction:column}
+.topbar{
+  position:sticky;top:0;z-index:20;background:var(--paper);
+  padding:calc(14px + var(--safe-t)) 18px 12px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid transparent;
+}
+.topbar.scrolled{border-bottom-color:var(--line)}
+.topbar h1{font-size:19px}
+.topbar .sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
+.icon-btn{
+  width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);
+}
+.icon-btn:active{transform:scale(.94)}
+.layout{display:flex;flex:1;min-height:0}
+.sidenav{display:none}
+main#view{flex:1;padding:4px 18px calc(96px + var(--safe-b));max-width:920px;width:100%;margin:0 auto}
+.bottomnav{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);
+  border-top:1px solid var(--line);display:flex;padding-bottom:var(--safe-b);
+}
+.bottomnav button{
+  flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:9px 2px 8px;color:var(--ink-soft);font-size:10.5px;cursor:pointer;min-height:44px;
+}
+.bottomnav button.active{color:var(--primary)}
+.bottomnav svg{width:21px;height:21px}
+
+@media (min-width:900px){
+  .bottomnav{display:none}
+  .sidenav{
+    display:flex;flex-direction:column;width:230px;flex-shrink:0;padding:20px 12px;
+    border-right:1px solid var(--line);gap:2px;
+  }
+  .sidenav .brand{display:flex;align-items:center;gap:10px;padding:6px 10px 22px}
+  .sidenav .brand .mark{width:34px;height:34px;border-radius:10px;background:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .sidenav button{
+    display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;border:0;background:none;
+    color:var(--ink-soft);font-size:14.5px;text-align:left;cursor:pointer;font-weight:600;
+  }
+  .sidenav button.active{background:var(--primary-soft);color:var(--primary)}
+  .sidenav svg{width:19px;height:19px;flex-shrink:0}
+  main#view{padding:24px 32px 40px}
+  .topbar{padding:20px 32px 12px}
+}
+
+/* ===================== COMPONENTS ===================== */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:16px}
+.section-title{font-size:13px;font-weight:700;color:var(--ink-soft);text-transform:none;margin:22px 0 10px;display:flex;align-items:center;justify-content:space-between}
+.hero{
+  background:linear-gradient(160deg,var(--primary) 0%, #0A3A24 100%);color:#fff;border-radius:var(--radius-l);
+  padding:22px 20px;margin-top:6px;position:relative;overflow:hidden;
+}
+.hero .label{font-size:13px;opacity:.85;font-weight:600}
+.hero .amount{font-size:clamp(30px,8vw,44px);font-weight:800;letter-spacing:-.02em;margin-top:4px}
+.hero .split{display:flex;gap:10px;margin-top:16px}
+.hero .split>div{flex:1;background:rgba(255,255,255,.12);border-radius:14px;padding:10px 12px}
+.hero .split .k{font-size:11px;opacity:.8}
+.hero .split .v{font-size:16px;font-weight:700;margin-top:2px}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+@media (min-width:640px){.stat-grid{grid-template-columns:repeat(4,1fr)}}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:13px 14px}
+.stat .v{font-size:19px;font-weight:800}
+.stat .k{font-size:11.5px;color:var(--ink-soft);margin-top:2px}
+.denom-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.denom-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:13px}
+.denom-card .val{font-size:17px;font-weight:800}
+.denom-card .pc{font-size:12px;color:var(--ink-soft);margin-top:2px}
+.denom-card .tv{font-size:13px;font-weight:700;color:var(--primary);margin-top:8px}
+.denom-card.archived{opacity:.55}
+.tag{display:inline-flex;align-items:center;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:var(--ink-soft)}
+.tag.note{background:var(--primary-soft);color:var(--primary)}
+.tag.coin{background:var(--gold-soft);color:var(--gold)}
+.list-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.list-row:last-child{border-bottom:0}
+.btn{
+  appearance:none;border:0;border-radius:14px;padding:13px 18px;font-size:14.5px;font-weight:700;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;
+}
+.btn-primary{background:var(--primary);color:var(--primary-ink)}
+.btn-primary:active{transform:scale(.98)}
+.btn-ghost{background:var(--surface-2);color:var(--ink)}
+.btn-danger{background:var(--danger-soft);color:var(--danger)}
+.btn-block{width:100%}
+.btn-sm{padding:8px 12px;font-size:13px;border-radius:10px;min-height:36px}
+.fab{
+  position:fixed;right:18px;bottom:calc(84px + var(--safe-b));z-index:25;background:var(--primary);color:#fff;
+  width:56px;height:56px;border-radius:50%;border:0;box-shadow:var(--shadow);display:flex;align-items:center;
+  justify-content:center;cursor:pointer;
+}
+@media (min-width:900px){.fab{display:none}}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:6px}
+.field input[type=text],.field input[type=number],.field input[type=tel],.field input[type=date],.field select,.field textarea{
+  width:100%;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;
+  padding:11px 13px;font-size:15px;min-height:44px;
+}
+.field textarea{min-height:70px;resize:vertical}
+.field .hint{font-size:11.5px;color:var(--ink-soft);margin-top:5px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
+.switch input{display:none}
+.switch .track{width:42px;height:25px;background:var(--surface-2);border:1.5px solid var(--line);border-radius:20px;position:relative;transition:.2s}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:.2s}
+.switch input:checked+.track{background:var(--primary);border-color:var(--primary)}
+.switch input:checked+.track::after{transform:translateX(17px)}
+.empty{text-align:center;padding:44px 16px;color:var(--ink-soft)}
+.empty .ic{width:52px;height:52px;margin:0 auto 14px;border-radius:16px;background:var(--surface-2);display:flex;align-items:center;justify-content:center}
+.empty .t{font-weight:700;color:var(--ink);font-size:15px}
+.empty .d{font-size:13px;margin-top:4px}
+.chip-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+.chip-row::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;padding:8px 14px;border-radius:20px;border:1.5px solid var(--line);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer;color:var(--ink-soft);min-height:36px}
+.chip.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.txn-item{border:1px solid var(--line);border-radius:var(--radius-m);margin-bottom:10px;overflow:hidden;background:var(--surface)}
+.txn-head{display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer}
+.txn-ic{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.txn-body{padding:0 14px 14px;font-size:13px;color:var(--ink-soft);display:none;border-top:1px dashed var(--line);margin-top:2px;padding-top:12px}
+.txn-item.open .txn-body{display:block}
+.kv{display:flex;justify-content:space-between;padding:4px 0}
+.modal-back{position:fixed;inset:0;background:rgba(15,20,17,.5);z-index:80;display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:640px){.modal-back{align-items:center}}
+.modal{background:var(--surface);border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:88dvh;overflow-y:auto;padding:20px 20px calc(20px + var(--safe-b));animation:up .25s ease}
+@media (min-width:640px){.modal{border-radius:22px;max-height:80dvh}}
+@keyframes up{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.modal-head h3{font-size:17px}
+.toast-host{position:fixed;left:0;right:0;bottom:calc(94px + var(--safe-b));z-index:90;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+@media (min-width:900px){.toast-host{bottom:24px}}
+.toast{background:var(--ink);color:var(--paper);padding:11px 18px;border-radius:30px;font-size:13.5px;font-weight:600;box-shadow:var(--shadow);max-width:90vw}
+:root[data-theme="dark"] .toast{background:var(--surface-2);color:var(--ink)}
+.toast.err{background:var(--danger)}
+.progress-mini{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+.adv-note-row{display:grid;grid-template-columns:34px 1fr 100px 60px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.adv-note-row input[type=text],.adv-note-row select{padding:7px 8px;font-size:12.5px;min-height:36px;border-radius:9px;border:1.5px solid var(--line)}
+.scroller-x{overflow-x:auto}
+table.simple{width:100%;border-collapse:collapse;font-size:13px}
+table.simple th{text-align:left;color:var(--ink-soft);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11.5px}
+table.simple td{padding:8px;border-bottom:1px solid var(--line)}
+.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--surface);box-shadow:0 0 0 1px var(--line)}
+.link-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.link-row .ic{width:38px;height:38px;border-radius:11px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.link-row>div{min-width:0;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="splash-mark">
+    <svg width="46" height="46" viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="13" rx="2.5" stroke="#fff" stroke-width="1.6"/><circle cx="12" cy="12.5" r="3.4" stroke="#fff" stroke-width="1.6"/><path d="M5 6V5a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/></svg>
+  </div>
+  <div class="splash-title">Cash Manager</div>
+  <div class="splash-tag" id="splashTag">Know your cash. Down to every note.</div>
+  <div class="splash-loader"><span></span></div>
+</div>
+
+<div id="app" hidden>
+  <div class="layout">
+    <nav class="sidenav" id="sidenav"></nav>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <header class="topbar" id="topbar">
+        <div>
+          <h1 id="pageTitle">Cash Manager</h1>
+          <div class="sub" id="pageSub"></div>
+        </div>
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v2M12 19v2M5 5l1.5 1.5M17.5 17.5L19 19M3 12h2M19 12h2M5 19l1.5-1.5M17.5 6.5L19 5" stroke-linecap="round"/><circle cx="12" cy="12" r="4.5"/></svg>
+        </button>
+      </header>
+      <main id="view" role="main"></main>
+    </div>
+  </div>
+  <nav class="bottomnav" id="bottomnav"></nav>
+  <button class="fab" id="fabAdd" aria-label="Add cash">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+</div>
+
+<div class="toast-host" id="toastHost"></div>
+<div id="dialogHost"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   I18N
+============================================================ */
+const I18N = {
+en:{
+  appName:"Cash Manager", tagline:"Know your cash. Down to every note.",
+  nav_dashboard:"Dashboard", nav_inventory:"Inventory", nav_transactions:"Transactions",
+  nav_reports:"Reports", nav_settings:"Settings", nav_add:"Add Cash", nav_about:"About",
+  nav_denominations:"Denominations",
+  dashboard_sub:"Your live cash position", totalCash:"Total Cash",
+  notes:"Notes", coins:"Coins", pieces:"pieces", piece:"piece",
+  totalPieces:"Total Pieces", denominationsCount:"Denominations", tornNotes:"Torn Notes",
+  newNotes:"New Notes", oldNotes:"Old Notes", byDenomination:"By denomination",
+  quickStats:"Summary", noDenoms:"No denominations yet", noDenomsDesc:"Add a denomination to get started.",
+  addCash:"Add Cash", addCashSub:"Enter how much you're adding, by denomination",
+  removeCash:"Remove Cash", transfer:"Transfer", advanced:"Advanced", quantity:"Quantity",
+  addIndividualDetails:"Add individual details", totalAdded:"Total Added Cash",
+  submitAdd:"Add Cash", condition_new:"New", condition_old:"Old", condition_mediumOld:"Medium Old",
+  condition_general:"General", torn:"Torn / Damaged", serial:"Serial no.", seq:"#",
+  cash_inventory:"Cash Inventory", inventorySub:"Grouped by note and coin", totalValue:"Total Value",
+  adjust:"Adjust", noInventory:"No cash recorded yet", noInventoryDesc:"Use Add Cash to record your first entry.",
+  denomManage:"Denominations", denomManageSub:"Manage note and coin denominations",
+  addDenomination:"Add Denomination", type:"Type", note:"Note", coin:"Coin", value:"Value",
+  status:"Status", active:"Active", disabled:"Disabled", enable:"Enable", disable:"Disable",
+  delete:"Delete", edit:"Edit", save:"Save", cancel:"Cancel", close:"Close",
+  advancedModeHint:"Allows condition & individual tracking for this denomination",
+  transactionsTitle:"Transactions", transactionsSub:"Complete history of every change",
+  all:"All", search:"Search transactions…", noTxns:"No transactions yet",
+  noTxnsDesc:"Every cash change you make will appear here.",
+  before:"Before", after:"After", change:"Change", type_ADD:"Added", type_REMOVE:"Removed",
+  type_TRANSFER_IN:"Transfer In", type_TRANSFER_OUT:"Transfer Out", type_ADJUSTMENT:"Adjustment",
+  type_EDIT:"Edit", reportsTitle:"Reports", reportsSub:"Insights into your cash",
+  currentSummary:"Current Cash Summary", conditionSummary:"Condition Summary",
+  dailyChanges:"Daily Changes", recentActivity:"Recent Activity",
+  settingsTitle:"Settings", settingsSub:"Configure Cash Manager", language:"Language",
+  currencyConfig:"Currency Configuration", country:"Country", currencyName:"Currency Name",
+  shortName:"Short Name", isoCode:"ISO Code", symbol:"Symbol", theme:"Appearance",
+  light:"Light", dark:"Dark", dataManagement:"Data Management", exportBackup:"Export Backup",
+  importBackup:"Import Backup", clearAllData:"Clear All Data", branding:"Profile & Branding",
+  uploadPhoto:"Upload Photo", removePhoto:"Remove Photo", aboutApp:"About",
+  savedSuccess:"Saved successfully.", cashAdded:"Cash added successfully.",
+  cashRemoved:"Cash removed successfully.", backupExported:"Backup exported successfully.",
+  backupInvalid:"Unable to import backup. The file appears invalid.",
+  backupImported:"Backup imported successfully.", dataCleared:"All data cleared.",
+  confirmClearTitle:"Clear all data?", confirmClearBody:"This permanently deletes every denomination, transaction and inventory record on this device. This cannot be undone.",
+  confirmDeleteDenomTitle:"Delete denomination?", confirmDeleteDenomBody:"This denomination has no recorded cash and can be safely removed.",
+  confirmArchiveTitle:"Disable denomination instead?", confirmArchiveBody:"This denomination has recorded cash or history, so it will be archived instead of deleted to keep your records accurate.",
+  confirmRemoveTitle:"Remove cash?", yesRemove:"Yes, remove", yesDelete:"Yes, delete", yesClear:"Yes, clear everything",
+  source:"Source", destination:"Destination", note_optional:"Note (optional)",
+  selectDenom:"Select denomination", available:"available", insufficientStock:"Not enough cash of this denomination.",
+  generateRows:"Rows generate automatically as you type the quantity.",
+  aboutDesc:"Offline-first cash denomination and inventory manager. Every note and coin, accounted for — with no server, no sign-in and no data ever leaving this device.",
+  createdBy:"Created by", portfolio:"Portfolio", youtube:"YouTube", linkedin:"LinkedIn", phone:"Phone",
+  filterType:"Type", filterCashType:"Notes / Coins", from:"From", to:"To", clearFilters:"Clear filters",
+  cannotRemoveMore:"You can't remove more pieces than you currently have.",
+  transferHint:"Transfer records a movement between your own cash locations for your history. It does not change your total tracked cash.",
+  totalPiecesCount:"pcs", perPiece:"per piece", denomInUse:"in use in inventory or history",
+  chooseType:"Choose type", enterValue:"Enter a value greater than 0", valueExists:"This denomination already exists",
+  transferSuccess:"Transfer recorded.", noneYet:"None yet", weekFilter:"This week", monthFilter:"This month",
+  allTimeFilter:"All time", grandTotal:"Grand Total", stockDetail:"Condition breakdown",
+  addRecordedFor:"Recorded for", loading:"Loading…", conditionEdit:"Adjust condition counts",
+  currentQty:"Current qty", newQty:"New qty", tornCount:"Torn / damaged count", saveAdjustment:"Save adjustment",
+  photoNote:"Photos are stored only on this device.", seniorEngineer:"Senior Software Engineer",
+  noPhoto:"No photo uploaded", denomActiveOnAdd:"Only active denominations appear in Add Cash.",
+},
+bn:{
+  appName:"ক্যাশ ম্যানেজার", tagline:"আপনার নগদ জানুন। প্রতিটি নোট পর্যন্ত।",
+  nav_dashboard:"ড্যাশবোর্ড", nav_inventory:"ইনভেন্টরি", nav_transactions:"লেনদেন",
+  nav_reports:"রিপোর্ট", nav_settings:"সেটিংস", nav_add:"নগদ যোগ করুন", nav_about:"সম্পর্কে",
+  nav_denominations:"মূল্যমান",
+  dashboard_sub:"আপনার লাইভ নগদ অবস্থান", totalCash:"মোট নগদ",
+  notes:"নোট", coins:"কয়েন", pieces:"টি", piece:"টি",
+  totalPieces:"মোট সংখ্যা", denominationsCount:"মূল্যমান সংখ্যা", tornNotes:"ছেঁড়া নোট",
+  newNotes:"নতুন নোট", oldNotes:"পুরাতন নোট", byDenomination:"মূল্যমান অনুযায়ী",
+  quickStats:"সারসংক্ষেপ", noDenoms:"এখনো কোনো মূল্যমান নেই", noDenomsDesc:"শুরু করতে একটি মূল্যমান যোগ করুন।",
+  addCash:"নগদ যোগ করুন", addCashSub:"মূল্যমান অনুযায়ী কত যোগ করছেন তা লিখুন",
+  removeCash:"নগদ সরান", transfer:"স্থানান্তর", advanced:"অ্যাডভান্সড", quantity:"পরিমাণ",
+  addIndividualDetails:"পৃথক বিবরণ যোগ করুন", totalAdded:"মোট যোগকৃত নগদ",
+  submitAdd:"নগদ যোগ করুন", condition_new:"নতুন", condition_old:"পুরাতন", condition_mediumOld:"মাঝারি পুরাতন",
+  condition_general:"সাধারণ", torn:"ছেঁড়া / ক্ষতিগ্রস্ত", serial:"সিরিয়াল নম্বর", seq:"#",
+  cash_inventory:"নগদ ইনভেন্টরি", inventorySub:"নোট ও কয়েন অনুযায়ী বিভক্ত", totalValue:"মোট মূল্য",
+  adjust:"সমন্বয়", noInventory:"এখনো কোনো নগদ রেকর্ড করা হয়নি", noInventoryDesc:"প্রথম এন্ট্রির জন্য নগদ যোগ করুন ব্যবহার করুন।",
+  denomManage:"মূল্যমান", denomManageSub:"নোট ও কয়েনের মূল্যমান পরিচালনা করুন",
+  addDenomination:"মূল্যমান যোগ করুন", type:"ধরন", note:"নোট", coin:"কয়েন", value:"মূল্য",
+  status:"অবস্থা", active:"সক্রিয়", disabled:"নিষ্ক্রিয়", enable:"সক্রিয় করুন", disable:"নিষ্ক্রিয় করুন",
+  delete:"মুছুন", edit:"সম্পাদনা", save:"সংরক্ষণ", cancel:"বাতিল", close:"বন্ধ",
+  advancedModeHint:"এই মূল্যমানের জন্য অবস্থা ও পৃথক ট্র্যাকিং চালু করে",
+  transactionsTitle:"লেনদেন", transactionsSub:"প্রতিটি পরিবর্তনের সম্পূর্ণ ইতিহাস",
+  all:"সব", search:"লেনদেন খুঁজুন…", noTxns:"এখনো কোনো লেনদেন নেই",
+  noTxnsDesc:"আপনার প্রতিটি নগদ পরিবর্তন এখানে দেখাবে।",
+  before:"আগে", after:"পরে", change:"পরিবর্তন", type_ADD:"যোগ হয়েছে", type_REMOVE:"সরানো হয়েছে",
+  type_TRANSFER_IN:"স্থানান্তর ইন", type_TRANSFER_OUT:"স্থানান্তর আউট", type_ADJUSTMENT:"সমন্বয়",
+  type_EDIT:"সম্পাদনা", reportsTitle:"রিপোর্ট", reportsSub:"আপনার নগদের অন্তর্দৃষ্টি",
+  currentSummary:"বর্তমান নগদ সারসংক্ষেপ", conditionSummary:"অবস্থা সারসংক্ষেপ",
+  dailyChanges:"দৈনিক পরিবর্তন", recentActivity:"সাম্প্রতিক কার্যকলাপ",
+  settingsTitle:"সেটিংস", settingsSub:"ক্যাশ ম্যানেজার কনফিগার করুন", language:"ভাষা",
+  currencyConfig:"মুদ্রা কনফিগারেশন", country:"দেশ", currencyName:"মুদ্রার নাম",
+  shortName:"সংক্ষিপ্ত নাম", isoCode:"ISO কোড", symbol:"চিহ্ন", theme:"থিম",
+  light:"লাইট", dark:"ডার্ক", dataManagement:"ডেটা ব্যবস্থাপনা", exportBackup:"ব্যাকআপ রপ্তানি",
+  importBackup:"ব্যাকআপ আমদানি", clearAllData:"সব ডেটা মুছুন", branding:"প্রোফাইল ও ব্র্যান্ডিং",
+  uploadPhoto:"ছবি আপলোড করুন", removePhoto:"ছবি সরান", aboutApp:"সম্পর্কে",
+  savedSuccess:"সফলভাবে সংরক্ষিত হয়েছে।", cashAdded:"নগদ সফলভাবে যোগ হয়েছে।",
+  cashRemoved:"নগদ সফলভাবে সরানো হয়েছে।", backupExported:"ব্যাকআপ সফলভাবে রপ্তানি হয়েছে।",
+  backupInvalid:"ব্যাকআপ আমদানি করা যায়নি। ফাইলটি সঠিক নয় বলে মনে হচ্ছে।",
+  backupImported:"ব্যাকআপ সফলভাবে আমদানি হয়েছে।", dataCleared:"সব ডেটা মুছে ফেলা হয়েছে।",
+  confirmClearTitle:"সব ডেটা মুছবেন?", confirmClearBody:"এটি এই ডিভাইসের প্রতিটি মূল্যমান, লেনদেন ও ইনভেন্টরি রেকর্ড স্থায়ীভাবে মুছে ফেলবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
+  confirmDeleteDenomTitle:"মূল্যমান মুছবেন?", confirmDeleteDenomBody:"এই মূল্যমানে কোনো নগদ রেকর্ড নেই, তাই নিরাপদে মুছে ফেলা যায়।",
+  confirmArchiveTitle:"পরিবর্তে নিষ্ক্রিয় করবেন?", confirmArchiveBody:"এই মূল্যমানে রেকর্ড বা ইতিহাস আছে, তাই রেকর্ড সঠিক রাখতে এটি মুছে না ফেলে নিষ্ক্রিয় করা হবে।",
+  confirmRemoveTitle:"নগদ সরাবেন?", yesRemove:"হ্যাঁ, সরান", yesDelete:"হ্যাঁ, মুছুন", yesClear:"হ্যাঁ, সব মুছুন",
+  source:"উৎস", destination:"গন্তব্য", note_optional:"নোট (ঐচ্ছিক)",
+  selectDenom:"মূল্যমান নির্বাচন করুন", available:"উপলব্ধ", insufficientStock:"এই মূল্যমানের পর্যাপ্ত নগদ নেই।",
+  generateRows:"পরিমাণ লেখার সাথে সাথে সারি স্বয়ংক্রিয়ভাবে তৈরি হয়।",
+  aboutDesc:"অফলাইন-ফার্স্ট নগদ মূল্যমান ও ইনভেন্টরি ম্যানেজার। কোনো সার্ভার নেই, লগইন নেই, এবং কোনো ডেটা এই ডিভাইস ছেড়ে যায় না।",
+  createdBy:"তৈরি করেছেন", portfolio:"পোর্টফোলিও", youtube:"ইউটিউব", linkedin:"লিংকডইন", phone:"ফোন",
+  filterType:"ধরন", filterCashType:"নোট / কয়েন", from:"থেকে", to:"পর্যন্ত", clearFilters:"ফিল্টার সাফ করুন",
+  cannotRemoveMore:"আপনার কাছে যা আছে তার চেয়ে বেশি সরাতে পারবেন না।",
+  transferHint:"স্থানান্তর আপনার নিজের নগদ অবস্থানের মধ্যে চলাচল রেকর্ড করে। এটি আপনার মোট ট্র্যাক করা নগদ পরিবর্তন করে না।",
+  totalPiecesCount:"টি", perPiece:"প্রতিটি", denomInUse:"ইনভেন্টরি বা ইতিহাসে ব্যবহৃত",
+  chooseType:"ধরন নির্বাচন করুন", enterValue:"০ এর চেয়ে বড় একটি মূল্য লিখুন", valueExists:"এই মূল্যমানটি ইতিমধ্যে বিদ্যমান",
+  transferSuccess:"স্থানান্তর রেকর্ড হয়েছে।", noneYet:"এখনো কিছু নেই", weekFilter:"এই সপ্তাহ", monthFilter:"এই মাস",
+  allTimeFilter:"সব সময়", grandTotal:"সর্বমোট", stockDetail:"অবস্থা বিভাজন",
+  addRecordedFor:"রেকর্ড করা হয়েছে", loading:"লোড হচ্ছে…", conditionEdit:"অবস্থার সংখ্যা সমন্বয় করুন",
+  currentQty:"বর্তমান পরিমাণ", newQty:"নতুন পরিমাণ", tornCount:"ছেঁড়া / ক্ষতিগ্রস্ত সংখ্যা", saveAdjustment:"সমন্বয় সংরক্ষণ",
+  photoNote:"ছবি শুধুমাত্র এই ডিভাইসে সংরক্ষিত থাকে।", seniorEngineer:"সিনিয়র সফটওয়্যার ইঞ্জিনিয়ার",
+  noPhoto:"কোনো ছবি আপলোড করা হয়নি", denomActiveOnAdd:"শুধুমাত্র সক্রিয় মূল্যমান নগদ যোগ করুন-এ দেখা যায়।",
+}
+};
+function t(key){ const lang = STATE.config.lang || 'en'; return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key; }
+
+/* ============================================================
+   ICONS
+============================================================ */
+const ICON = {
+  home:'<path d="M4 11.5 12 4l8 7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9" stroke-linecap="round" stroke-linejoin="round"/>',
+  layers:'<path d="M12 3 3 8l9 5 9-5-9-5Z" stroke-linejoin="round"/><path d="m3 12 9 5 9-5" stroke-linecap="round" stroke-linejoin="round"/><path d="m3 16 9 5 9-5" stroke-linecap="round" stroke-linejoin="round"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13" stroke-linecap="round"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/>',
+  chart:'<path d="M4 20V10M11 20V4M18 20v-7" stroke-linecap="round" stroke-linejoin="round"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V19a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.6V4a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.6 1H20a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.6 1Z" stroke-linecap="round" stroke-linejoin="round"/>',
+  plus:'<path d="M12 5v14M5 12h14" stroke-linecap="round"/>',
+  minus:'<path d="M5 12h14" stroke-linecap="round"/>',
+  swap:'<path d="M7 3 3 7l4 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 7h13a4 4 0 0 1 4 4v1" stroke-linecap="round"/><path d="m17 21 4-4-4-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 17H8a4 4 0 0 1-4-4v-1" stroke-linecap="round"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7" stroke-linecap="round"/>',
+  chevron:'<path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>',
+  trash:'<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0-1 13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 7" stroke-linecap="round" stroke-linejoin="round"/>',
+  edit:'<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-linecap="round" stroke-linejoin="round"/>',
+  camera:'<path d="M4 8h3l2-2h6l2 2h3v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.4"/>',
+  bank:'<path d="M3 21h18M4 21V10M20 21V10M2 10l10-6 10 6M6 10v11M10 10v11M14 10v11M18 10v11" stroke-linecap="round" stroke-linejoin="round"/>',
+  wallet:'<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M16 12.5h3" stroke-linecap="round"/><path d="M2.5 9.5h19" />',
+};
+function icon(name,size=18){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${ICON[name]||''}</svg>`; }
+
+/* ============================================================
+   DB LAYER (IndexedDB)
+============================================================ */
+const DB_NAME='cashManagerDB', DB_VERSION=1;
+let _db=null;
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains('meta')) db.createObjectStore('meta',{keyPath:'key'});
+      if(!db.objectStoreNames.contains('denominations')) db.createObjectStore('denominations',{keyPath:'id'});
+      if(!db.objectStoreNames.contains('stock')) db.createObjectStore('stock',{keyPath:'id'});
+      if(!db.objectStoreNames.contains('items')){
+        const s = db.createObjectStore('items',{keyPath:'id',autoIncrement:true});
+        s.createIndex('denominationId','denominationId');
+      }
+      if(!db.objectStoreNames.contains('transactions')){
+        const s = db.createObjectStore('transactions',{keyPath:'id',autoIncrement:true});
+        s.createIndex('timestamp','timestamp');
+      }
+    };
+    req.onsuccess = ()=>{ _db=req.result; res(_db); };
+    req.onerror = ()=>rej(req.error);
+  });
+}
+function tx(storeNames,mode='readonly'){ return _db.transaction(storeNames,mode); }
+function idbGetAll(store){
+  return new Promise((res,rej)=>{
+    const r = tx(store).objectStore(store).getAll();
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function idbGet(store,key){
+  return new Promise((res,rej)=>{
+    const r = tx(store).objectStore(store).get(key);
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function idbPut(store,val){
+  return new Promise((res,rej)=>{
+    const t = tx(store,'readwrite'); const r = t.objectStore(store).put(val);
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function idbAdd(store,val){
+  return new Promise((res,rej)=>{
+    const t = tx(store,'readwrite'); const r = t.objectStore(store).add(val);
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function idbDelete(store,key){
+  return new Promise((res,rej)=>{
+    const t = tx(store,'readwrite'); const r = t.objectStore(store).delete(key);
+    r.onsuccess=()=>res(); r.onerror=()=>rej(r.error);
+  });
+}
+function idbClear(store){
+  return new Promise((res,rej)=>{
+    const t = tx(store,'readwrite'); const r = t.objectStore(store).clear();
+    r.onsuccess=()=>res(); r.onerror=()=>rej(r.error);
+  });
+}
+
+/* ============================================================
+   STATE
+============================================================ */
+const DEFAULT_CONFIG = {
+  key:'config', country:'Bangladesh', currencyName:'Taka', shortName:'Tk',
+  iso:'BDT', symbol:'৳', lang:'en', theme:'light'
+};
+const DEFAULT_BRANDING = { key:'branding', photo:null };
+const STATE = {
+  config: {...DEFAULT_CONFIG},
+  branding: {...DEFAULT_BRANDING},
+  denominations: [],
+  stock: [],
+  items: [],
+  transactions: [],
+};
+
+function uid(prefix){ return prefix+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+async function seedDefaultsIfNeeded(){
+  const existing = await idbGetAll('denominations');
+  if(existing.length>0) return;
+  const notes = [2,5,10,20,50,100,500,1000];
+  const coins = [1,2,5];
+  const now = Date.now();
+  for(const v of notes){
+    await idbPut('denominations', { id:uid('den'), type:'note', value:v, currency:'BDT', status:'active', advanced:false, createdAt:now });
+  }
+  for(const v of coins){
+    await idbPut('denominations', { id:uid('den'), type:'coin', value:v, currency:'BDT', status:'active', advanced:false, createdAt:now });
+  }
+}
+
+async function loadState(){
+  const cfg = await idbGet('meta','config');
+  STATE.config = cfg ? {...DEFAULT_CONFIG, ...cfg} : {...DEFAULT_CONFIG};
+  const br = await idbGet('meta','branding');
+  STATE.branding = br ? {...DEFAULT_BRANDING, ...br} : {...DEFAULT_BRANDING};
+  STATE.denominations = (await idbGetAll('denominations')).sort((a,b)=> a.type===b.type ? a.value-b.value : (a.type==='note'?-1:1));
+  STATE.stock = await idbGetAll('stock');
+  STATE.items = await idbGetAll('items');
+  STATE.transactions = (await idbGetAll('transactions')).sort((a,b)=>b.timestamp-a.timestamp);
+  document.documentElement.setAttribute('data-theme', STATE.config.theme || 'light');
+  document.documentElement.setAttribute('lang', STATE.config.lang || 'en');
+}
+async function saveConfig(){ await idbPut('meta', {...STATE.config, key:'config'}); }
+async function saveBranding(){ await idbPut('meta', {...STATE.branding, key:'branding'}); }
+
+/* ============================================================
+   BUSINESS LOGIC HELPERS
+============================================================ */
+function fmtMoney(n){
+  n = Math.round((n+Number.EPSILON)*100)/100;
+  const parts = Math.abs(n).toFixed(n%1===0?0:2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{2})+(?!\d)(?=\d{3}(?!\d)))|\B(?=\d{3}(?=(\d{2})*$)(?!\d{4}))/g, ',')
+    .replace(/^(\d)(\d\d)(?=,)/,'$1$2');
+  // simplified south-asian grouping
+  parts[0] = groupIndian(Math.abs(Math.trunc(n)).toString());
+  const sign = n<0?'-':'';
+  return `${sign}${STATE.config.symbol} ${parts.join('.')}`;
+}
+function groupIndian(numStr){
+  if(numStr.length<=3) return numStr;
+  let last3 = numStr.slice(-3);
+  let rest = numStr.slice(0,-3);
+  rest = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return rest+','+last3;
+}
+function fmtDate(ts){
+  const d = new Date(ts);
+  const day = d.getDate();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let h = d.getHours(); const m = d.getMinutes().toString().padStart(2,'0');
+  const ampm = h>=12?'PM':'AM'; h = h%12; if(h===0) h=12;
+  return `${day} ${months[d.getMonth()]} ${d.getFullYear()}, ${h}:${m} ${ampm}`;
+}
+function fmtDateShort(ts){
+  const d = new Date(ts);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+function stockRowsFor(denomId){ return STATE.stock.filter(s=>s.denominationId===denomId); }
+function itemsFor(denomId){ return STATE.items.filter(i=>i.denominationId===denomId && i.active!==false); }
+function quantityFor(denomId){
+  const agg = stockRowsFor(denomId).reduce((s,r)=>s+r.quantity,0);
+  const ind = itemsFor(denomId).length;
+  return agg+ind;
+}
+function conditionBreakdown(denomId){
+  const b = {new:0, old:0, mediumOld:0, general:0, torn:0, total:0};
+  stockRowsFor(denomId).forEach(r=>{ b[r.condition]=(b[r.condition]||0)+r.quantity; if(r.torn) b.torn+=r.quantity; b.total+=r.quantity; });
+  itemsFor(denomId).forEach(i=>{ b[i.condition]=(b[i.condition]||0)+1; if(i.torn) b.torn+=1; b.total+=1; });
+  return b;
+}
+function denomValue(d){ return quantityFor(d.id)*d.value; }
+function totalCash(){ return STATE.denominations.reduce((s,d)=>s+denomValue(d),0); }
+function totalByType(type){ return STATE.denominations.filter(d=>d.type===type).reduce((s,d)=>s+denomValue(d),0); }
+function piecesByType(type){ return STATE.denominations.filter(d=>d.type===type).reduce((s,d)=>s+quantityFor(d.id),0); }
+function activeDenoms(){ return STATE.denominations.filter(d=>d.status==='active'); }
+
+async function recordTransaction(data){
+  const t = { timestamp: Date.now(), ...data };
+  const id = await idbAdd('transactions', t);
+  STATE.transactions.unshift({...t,id});
+}
+async function upsertStock(denomId, condition, torn, deltaQty){
+  const rowId = `${denomId}|${condition}|${torn?1:0}`;
+  let row = STATE.stock.find(s=>s.id===rowId);
+  if(!row){ row = {id:rowId, denominationId:denomId, condition, torn:!!torn, quantity:0}; }
+  row.quantity += deltaQty;
+  if(row.quantity<0) row.quantity=0;
+  await idbPut('stock', row);
+  const idx = STATE.stock.findIndex(s=>s.id===rowId);
+  if(idx>=0) STATE.stock[idx]=row; else STATE.stock.push(row);
+  return row;
+}
+
+/* ============================================================
+   UI HELPERS: toast, confirm dialog, modal
+============================================================ */
+function toast(msg, type){
+  const host = document.getElementById('toastHost');
+  const el = document.createElement('div');
+  el.className = 'toast'+(type==='err'?' err':'');
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(),300); }, 2600);
+}
+function confirmDialog({title, body, confirmLabel, danger}){
+  return new Promise((resolve)=>{
+    const host = document.getElementById('dialogHost');
+    host.innerHTML = `
+      <div class="modal-back" data-role="back">
+        <div class="modal" role="alertdialog" aria-modal="true">
+          <div class="modal-head"><h3>${escapeHtml(title)}</h3></div>
+          <p style="color:var(--ink-soft);font-size:14px;line-height:1.5">${escapeHtml(body)}</p>
+          <div style="display:flex;gap:10px;margin-top:20px">
+            <button class="btn btn-ghost btn-block" data-role="cancel">${t('cancel')}</button>
+            <button class="btn ${danger?'btn-danger':'btn-primary'} btn-block" data-role="ok">${escapeHtml(confirmLabel)}</button>
+          </div>
+        </div>
+      </div>`;
+    host.querySelector('[data-role="cancel"]').onclick=()=>{host.innerHTML='';resolve(false)};
+    host.querySelector('[data-role="back"]').addEventListener('click',(e)=>{ if(e.target.dataset.role==='back'){host.innerHTML='';resolve(false);} });
+    host.querySelector('[data-role="ok"]').onclick=()=>{host.innerHTML='';resolve(true)};
+  });
+}
+function openModal(innerHtml, onMount){
+  const host = document.getElementById('dialogHost');
+  host.innerHTML = `<div class="modal-back" data-role="back"><div class="modal" role="dialog" aria-modal="true">${innerHtml}</div></div>`;
+  host.querySelector('[data-role="back"]').addEventListener('click',(e)=>{ if(e.target.dataset.role==='back') closeModal(); });
+  if(onMount) onMount(host);
+}
+function closeModal(){ document.getElementById('dialogHost').innerHTML=''; }
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function emptyState(iconName, title, desc){
+  return `<div class="empty"><div class="ic">${icon(iconName,26)}</div><div class="t">${escapeHtml(title)}</div><div class="d">${escapeHtml(desc)}</div></div>`;
+}
+
+/* ============================================================
+   ROUTER + NAV
+============================================================ */
+const ROUTES = [
+  {path:'dashboard', label:()=>t('nav_dashboard'), i:'home', sub:()=>t('dashboard_sub'), render:renderDashboard},
+  {path:'inventory', label:()=>t('nav_inventory'), i:'layers', sub:()=>t('inventorySub'), render:renderInventory},
+  {path:'transactions', label:()=>t('nav_transactions'), i:'list', sub:()=>t('transactionsSub'), render:renderTransactions},
+  {path:'reports', label:()=>t('nav_reports'), i:'chart', sub:()=>t('reportsSub'), render:renderReports},
+  {path:'settings', label:()=>t('nav_settings'), i:'gear', sub:()=>t('settingsSub'), render:renderSettings},
+];
+const EXTRA_ROUTES = {
+  add:{label:()=>t('nav_add'), sub:()=>t('addCashSub'), render:renderAddCash},
+  denominations:{label:()=>t('nav_denominations'), sub:()=>t('denomManageSub'), render:renderDenominations},
+  about:{label:()=>t('nav_about'), sub:()=>'', render:renderAbout},
+};
+function currentPath(){ return (location.hash.replace('#/','')||'dashboard').split('?')[0]; }
+function navigate(path){ location.hash = '#/'+path; }
+
+function renderNav(){
+  const active = currentPath();
+  const items = ROUTES.map(r=>({...r, path:r.path})).concat([{path:'about',label:EXTRA_ROUTES.about.label,i:'user'}]);
+  document.getElementById('bottomnav').innerHTML = ROUTES.map(r=>`
+    <button data-path="${r.path}" class="${active===r.path?'active':''}" aria-label="${r.label()}">
+      ${icon(r.i,21)}<span>${r.label()}</span>
+    </button>`).join('');
+  document.getElementById('sidenav').innerHTML = `
+    <div class="brand">
+      <div class="mark">${icon('wallet',18)}</div>
+      <div><div style="font-weight:800;font-size:15px">${t('appName')}</div></div>
+    </div>
+    ${ROUTES.map(r=>`<button data-path="${r.path}" class="${active===r.path?'active':''}">${icon(r.i,19)}<span>${r.label()}</span></button>`).join('')}
+    <button data-path="about" class="${active==='about'?'active':''}">${icon('user',19)}<span>${EXTRA_ROUTES.about.label()}</span></button>
+    <div style="flex:1"></div>
+    <button data-path="add" style="background:var(--primary);color:#fff;justify-content:center">${icon('plus',18)}<span>${t('nav_add')}</span></button>
+  `;
+  document.querySelectorAll('[data-path]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.path)));
+}
+function renderHeader(routeDef){
+  document.getElementById('pageTitle').textContent = routeDef.label();
+  document.getElementById('pageSub').textContent = (routeDef.sub && routeDef.sub()) || '';
+}
+async function router(){
+  const path = currentPath();
+  const view = document.getElementById('view');
+  const routeDef = ROUTES.find(r=>r.path===path) || EXTRA_ROUTES[path] || ROUTES[0];
+  renderNav();
+  renderHeader(routeDef);
+  view.innerHTML = `<div style="padding:40px 0;text-align:center;color:var(--ink-soft)">${t('loading')}</div>`;
+  await routeDef.render(view);
+  view.scrollTop = 0;
+  window.scrollTo(0,0);
+  document.getElementById('fabAdd').style.display = (path==='add') ? 'none':'flex';
+}
+window.addEventListener('hashchange', router);
+
+/* ============================================================
+   VIEW: DASHBOARD
+============================================================ */
+function renderDashboard(view){
+  const notesTotal = totalByType('note'), coinsTotal = totalByType('coin');
+  const notesPieces = piecesByType('note'), coinsPieces = piecesByType('coin');
+  let torn=0,newN=0,oldN=0;
+  STATE.denominations.forEach(d=>{ const b=conditionBreakdown(d.id); torn+=b.torn; if(d.type==='note'){ newN+=b.new; oldN+=b.old; } });
+  const totalPieces = notesPieces+coinsPieces;
+  const denomCards = STATE.denominations.filter(d=>quantityFor(d.id)>0 || d.status==='active');
+  view.innerHTML = `
+    <div class="hero">
+      <div class="label">${t('totalCash')}</div>
+      <div class="amount num">${fmtMoney(totalCash())}</div>
+      <div class="split">
+        <div><div class="k">${t('notes')}</div><div class="v num">${fmtMoney(notesTotal)}</div></div>
+        <div><div class="k">${t('coins')}</div><div class="v num">${fmtMoney(coinsTotal)}</div></div>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="v num">${totalPieces}</div><div class="k">${t('totalPieces')}</div></div>
+      <div class="stat"><div class="v num">${STATE.denominations.length}</div><div class="k">${t('denominationsCount')}</div></div>
+      <div class="stat"><div class="v num">${newN}</div><div class="k">${t('newNotes')}</div></div>
+      <div class="stat"><div class="v num">${torn}</div><div class="k">${t('tornNotes')}</div></div>
+    </div>
+    <div class="section-title">${t('byDenomination')}</div>
+    ${denomCards.length? `<div class="denom-grid">${denomCards.map(d=>`
+      <div class="denom-card ${d.status!=='active'?'archived':''}">
+        <span class="tag ${d.type}">${d.type==='note'?t('note'):t('coin')}</span>
+        <div class="val num" style="margin-top:8px">${fmtMoney(d.value)}</div>
+        <div class="pc num">${quantityFor(d.id)} ${t('pieces')}</div>
+        <div class="tv num">${fmtMoney(denomValue(d))}</div>
+      </div>`).join('')}</div>` : emptyState('layers', t('noDenoms'), t('noDenomsDesc'))}
+  `;
+}
+
+/* ============================================================
+   VIEW: INVENTORY
+============================================================ */
+function renderInventory(view){
+  const groups = [['note',t('notes')],['coin',t('coins')]];
+  view.innerHTML = `
+    <div class="chip-row" style="margin-bottom:6px">
+      <button class="chip active" data-act="add">${icon('plus',14)} ${t('addCash')}</button>
+      <button class="chip" data-act="remove">${icon('minus',14)} ${t('removeCash')}</button>
+      <button class="chip" data-act="transfer">${icon('swap',14)} ${t('transfer')}</button>
+    </div>
+    ${groups.map(([type,label])=>{
+      const ds = STATE.denominations.filter(d=>d.type===type);
+      if(!ds.length) return '';
+      return `<div class="section-title">${label}</div><div class="card" style="padding:4px 16px">
+        ${ds.map(d=>{
+          const b = conditionBreakdown(d.id); const qty = quantityFor(d.id);
+          return `<div class="list-row" style="flex-direction:column;align-items:stretch;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:700;font-size:15px" class="num">${fmtMoney(d.value)} <span class="tag ${d.type}" style="margin-left:4px">${d.type==='note'?t('note'):t('coin')}</span></div>
+                <div class="num" style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">${qty} ${t('pieces')} · <span class="num">${fmtMoney(denomValue(d))}</span></div>
+              </div>
+              <button class="btn btn-ghost btn-sm" data-adjust="${d.id}">${t('adjust')}</button>
+            </div>
+            ${qty>0?`<div style="font-size:11.5px;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:8px">
+              <span>${t('condition_general')}: ${b.general||0}</span>
+              <span>${t('condition_new')}: ${b.new||0}</span>
+              <span>${t('condition_old')}: ${b.old||0}</span>
+              ${d.type==='note'?`<span>${t('condition_mediumOld')}: ${b.mediumOld||0}</span>`:''}
+              ${b.torn?`<span style="color:var(--danger)">${t('torn')}: ${b.torn}</span>`:''}
+            </div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('') || emptyState('layers', t('noInventory'), t('noInventoryDesc'))}
+  `;
+  view.querySelector('[data-act="add"]').onclick=()=>navigate('add');
+  view.querySelector('[data-act="remove"]').onclick=()=>openRemoveModal();
+  view.querySelector('[data-act="transfer"]').onclick=()=>openTransferModal();
+  view.querySelectorAll('[data-adjust]').forEach(b=>b.onclick=()=>openAdjustModal(b.dataset.adjust));
+}
+
+function openAdjustModal(denomId){
+  const d = STATE.denominations.find(x=>x.id===denomId); if(!d) return;
+  const b = conditionBreakdown(denomId);
+  const conditions = d.type==='note' ? ['general','new','old','mediumOld'] : ['general','new','old'];
+  openModal(`
+    <div class="modal-head"><h3>${t('conditionEdit')}</h3><button class="icon-btn" data-role="x">${icon('minus',16)}</button></div>
+    <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px" class="num">${fmtMoney(d.value)} · ${t('currentQty')}: ${quantityFor(denomId)}</div>
+    ${conditions.map(c=>`<div class="field"><label>${t('condition_'+c)}</label><input type="number" min="0" inputmode="numeric" id="adj-${c}" value="${b[c]||0}"></div>`).join('')}
+    <div class="field"><label>${t('tornCount')}</label><input type="number" min="0" inputmode="numeric" id="adj-torn" value="${b.torn||0}"></div>
+    <button class="btn btn-primary btn-block" id="adjSave">${t('saveAdjustment')}</button>
+  `, (host)=>{
+    host.querySelector('[data-role="x"]').onclick=closeModal;
+    host.querySelector('#adjSave').onclick= async ()=>{
+      const prevQty = quantityFor(denomId);
+      for(const c of conditions){
+        const val = Math.max(0, parseInt(host.querySelector('#adj-'+c).value)||0);
+        const row = STATE.stock.find(s=>s.denominationId===denomId && s.condition===c && !s.torn);
+        const cur = row?row.quantity:0;
+        if(val!==cur) await upsertStock(denomId,c,false,val-cur);
+      }
+      const tornVal = Math.max(0, parseInt(host.querySelector('#adj-torn').value)||0);
+      const tornRow = STATE.stock.find(s=>s.denominationId===denomId && s.torn);
+      const curTorn = tornRow?tornRow.quantity:0;
+      if(tornVal!==curTorn) await upsertStock(denomId,'general',true,tornVal-curTorn);
+      const newQty = quantityFor(denomId);
+      await recordTransaction({type:'ADJUSTMENT', denominationId:denomId, denomValue:d.value, cashType:d.type, quantity:newQty-prevQty, amount:(newQty-prevQty)*d.value, previousQty:prevQty, newQty, note:''});
+      closeModal(); toast(t('savedSuccess')); router();
+    };
+  });
+}
+
+function openRemoveModal(){
+  const avail = STATE.denominations.filter(d=>quantityFor(d.id)>0);
+  if(!avail.length){ toast(t('insufficientStock'),'err'); return; }
+  openModal(`
+    <div class="modal-head"><h3>${t('removeCash')}</h3><button class="icon-btn" data-role="x">${icon('minus',16)}</button></div>
+    <div class="field"><label>${t('selectDenom')}</label>
+      <select id="rmDenom">${avail.map(d=>`<option value="${d.id}">${fmtMoney(d.value)} · ${d.type==='note'?t('note'):t('coin')} (${quantityFor(d.id)} ${t('available')})</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>${t('quantity')}</label><input type="number" min="1" id="rmQty" inputmode="numeric" value="1"></div>
+    <div class="field"><label>${t('note_optional')}</label><textarea id="rmNote"></textarea></div>
+    <button class="btn btn-danger btn-block" id="rmSubmit">${t('removeCash')}</button>
+  `,(host)=>{
+    host.querySelector('[data-role="x"]').onclick=closeModal;
+    host.querySelector('#rmSubmit').onclick= async ()=>{
+      const denomId = host.querySelector('#rmDenom').value;
+      const qty = parseInt(host.querySelector('#rmQty').value)||0;
+      const noteText = host.querySelector('#rmNote').value||'';
+      const d = STATE.denominations.find(x=>x.id===denomId);
+      const avail2 = quantityFor(denomId);
+      if(qty<=0) return;
+      if(qty>avail2){ toast(t('cannotRemoveMore'),'err'); return; }
+      const ok = await confirmDialog({title:t('confirmRemoveTitle'), body:`${fmtMoney(d.value)} × ${qty} = ${fmtMoney(d.value*qty)}`, confirmLabel:t('yesRemove'), danger:true});
+      if(!ok) return;
+      const prevQty = avail2;
+      await consumeQuantity(denomId, qty);
+      const newQty = quantityFor(denomId);
+      await recordTransaction({type:'REMOVE', denominationId:denomId, denomValue:d.value, cashType:d.type, quantity:qty, amount:qty*d.value, previousQty:prevQty, newQty, note: noteText});
+      toast(t('cashRemoved')); router();
+    };
+  });
+}
+async function consumeQuantity(denomId, qty){
+  let remaining = qty;
+  const rows = stockRowsFor(denomId).slice().sort((a,b)=> (a.condition==='general'?-1:1) - (b.condition==='general'?-1:1));
+  for(const row of rows){
+    if(remaining<=0) break;
+    const take = Math.min(row.quantity, remaining);
+    if(take>0){ await upsertStock(denomId,row.condition,row.torn,-take); remaining-=take; }
+  }
+  if(remaining>0){
+    const its = itemsFor(denomId).slice().sort((a,b)=>a.id-b.id);
+    for(const it of its){
+      if(remaining<=0) break;
+      it.active=false; await idbPut('items', it);
+      const idx=STATE.items.findIndex(x=>x.id===it.id); if(idx>=0) STATE.items[idx]=it;
+      remaining--;
+    }
+  }
+}
+
+function openTransferModal(){
+  const ds = STATE.denominations.filter(d=>quantityFor(d.id)>0);
+  if(!ds.length){ toast(t('insufficientStock'),'err'); return; }
+  openModal(`
+    <div class="modal-head"><h3>${t('transfer')}</h3><button class="icon-btn" data-role="x">${icon('minus',16)}</button></div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px">${t('transferHint')}</p>
+    <div class="field"><label>${t('selectDenom')}</label>
+      <select id="trDenom">${ds.map(d=>`<option value="${d.id}">${fmtMoney(d.value)} · ${d.type==='note'?t('note'):t('coin')} (${quantityFor(d.id)} ${t('available')})</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>${t('quantity')}</label><input type="number" min="1" id="trQty" value="1"></div>
+    <div class="row2">
+      <div class="field"><label>${t('source')}</label><input type="text" id="trSrc" placeholder="Wallet"></div>
+      <div class="field"><label>${t('destination')}</label><input type="text" id="trDst" placeholder="Cash Box"></div>
+    </div>
+    <div class="field"><label>${t('note_optional')}</label><textarea id="trNote"></textarea></div>
+    <button class="btn btn-primary btn-block" id="trSubmit">${t('transfer')}</button>
+  `,(host)=>{
+    host.querySelector('[data-role="x"]').onclick=closeModal;
+    host.querySelector('#trSubmit').onclick= async ()=>{
+      const denomId = host.querySelector('#trDenom').value;
+      const qty = parseInt(host.querySelector('#trQty').value)||0;
+      const d = STATE.denominations.find(x=>x.id===denomId);
+      const avail = quantityFor(denomId);
+      if(qty<=0) return;
+      if(qty>avail){ toast(t('cannotRemoveMore'),'err'); return; }
+      const src = host.querySelector('#trSrc').value||'—', dst = host.querySelector('#trDst').value||'—';
+      const note = host.querySelector('#trNote').value||'';
+      const q = quantityFor(denomId);
+      await recordTransaction({type:'TRANSFER_OUT', denominationId:denomId, denomValue:d.value, cashType:d.type, quantity:qty, amount:qty*d.value, previousQty:q, newQty:q, source:src, destination:dst, note});
+      await recordTransaction({type:'TRANSFER_IN', denominationId:denomId, denomValue:d.value, cashType:d.type, quantity:qty, amount:qty*d.value, previousQty:q, newQty:q, source:src, destination:dst, note});
+      closeModal(); toast(t('transferSuccess')); router();
+    };
+  });
+}
+
+/* ============================================================
+   VIEW: ADD CASH
+============================================================ */
+let addDraft = {};
+function resetAddDraft(){ addDraft = {}; activeDenoms().forEach(d=>{ addDraft[d.id]={qty:0, individual:false, rows:[]}; }); }
+function renderAddCash(view){
+  resetAddDraft();
+  const notes = activeDenoms().filter(d=>d.type==='note');
+  const coins = activeDenoms().filter(d=>d.type==='coin');
+  const groupHtml = (list,label)=> !list.length ? '' : `<div class="section-title">${label}</div><div style="display:flex;flex-direction:column;gap:10px">${list.map(d=>addRowHtml(d)).join('')}</div>`;
+  view.innerHTML = `
+    <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:6px">${t('denomActiveOnAdd')}</p>
+    ${groupHtml(notes, t('notes'))}
+    ${groupHtml(coins, t('coins'))}
+    ${!notes.length && !coins.length ? emptyState('layers', t('noDenoms'), t('noDenomsDesc')) : `
+    <div class="card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
+      <div><div style="font-size:12.5px;color:var(--ink-soft)">${t('totalAdded')}</div><div id="grandTotal" class="num" style="font-size:22px;font-weight:800">${fmtMoney(0)}</div></div>
+      <button class="btn btn-primary" id="submitAdd">${t('submitAdd')}</button>
+    </div>`}
+  `;
+  view.querySelectorAll('[data-qty]').forEach(inp=>inp.addEventListener('input', onAddQtyChange));
+  view.querySelectorAll('[data-ind]').forEach(cb=>cb.addEventListener('change', onIndividualToggle));
+  const submitBtn = document.getElementById('submitAdd');
+  if(submitBtn) submitBtn.onclick = submitAddCash;
+}
+function addRowHtml(d){
+  return `<div class="card" id="addrow-${d.id}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="font-weight:700" class="num">${fmtMoney(d.value)} <span class="tag ${d.type}" style="margin-left:4px">${d.type==='note'?t('note'):t('coin')}</span></div>
+      <input type="number" min="0" inputmode="numeric" placeholder="0" data-qty="${d.id}" style="width:100px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font-size:15px;text-align:right;min-height:40px">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <span id="rowtotal-${d.id}" class="num" style="font-size:12.5px;color:var(--ink-soft)">${fmtMoney(d.value)} × 0 = ${fmtMoney(0)}</span>
+      ${d.advanced?`<label class="switch" style="font-size:12px"><input type="checkbox" data-ind="${d.id}"><span class="track"></span>${t('addIndividualDetails')}</label>`:''}
+    </div>
+    <div id="rowsbox-${d.id}"></div>
+  </div>`;
+}
+function onAddQtyChange(e){
+  const id = e.target.dataset.qty;
+  const qty = Math.max(0, parseInt(e.target.value)||0);
+  addDraft[id].qty = qty;
+  const d = STATE.denominations.find(x=>x.id===id);
+  document.getElementById('rowtotal-'+id).textContent = `${fmtMoney(d.value)} × ${qty} = ${fmtMoney(d.value*qty)}`;
+  if(addDraft[id].individual) renderIndividualRows(id);
+  updateGrandTotal();
+}
+function onIndividualToggle(e){
+  const id = e.target.dataset.ind;
+  addDraft[id].individual = e.target.checked;
+  if(e.target.checked) renderIndividualRows(id);
+  else document.getElementById('rowsbox-'+id).innerHTML='';
+}
+function renderIndividualRows(id){
+  const d = STATE.denominations.find(x=>x.id===id);
+  const qty = addDraft[id].qty;
+  const rows = addDraft[id].rows;
+  while(rows.length<qty) rows.push({serial:'', condition:'general', torn:false});
+  rows.length = qty;
+  const box = document.getElementById('rowsbox-'+id);
+  if(qty===0){ box.innerHTML=''; return; }
+  const conditions = d.type==='note' ? ['general','new','old','mediumOld'] : ['general','new','old'];
+  box.innerHTML = `<p class="hint" style="margin:8px 0">${t('generateRows')}</p>
+    <div class="scroller-x">${rows.map((r,i)=>`
+      <div class="adv-note-row">
+        <span class="num">${t('seq')}${String(i+1).padStart(3,'0')}</span>
+        ${d.type==='note'?`<input type="text" placeholder="${t('serial')}" data-row="${id}:${i}:serial" value="${escapeHtml(r.serial)}">`:'<span></span>'}
+        <select data-row="${id}:${i}:condition">${conditions.map(c=>`<option value="${c}" ${r.condition===c?'selected':''}>${t('condition_'+c)}</option>`).join('')}</select>
+        ${d.type==='note'?`<label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" data-row="${id}:${i}:torn" ${r.torn?'checked':''}> ${t('torn')}</label>`:'<span></span>'}
+      </div>`).join('')}</div>`;
+  box.querySelectorAll('[data-row]').forEach(el=>{
+    el.addEventListener(el.type==='checkbox'?'change':'input', (e)=>{
+      const [denId,idx,field] = e.target.dataset.row.split(':');
+      const val = e.target.type==='checkbox' ? e.target.checked : e.target.value;
+      addDraft[denId].rows[+idx][field] = val;
+    });
+  });
+}
+function updateGrandTotal(){
+  const total = Object.entries(addDraft).reduce((s,[id,v])=>{ const d=STATE.denominations.find(x=>x.id===id); return s+(d?d.value*v.qty:0); },0);
+  const el = document.getElementById('grandTotal'); if(el) el.textContent = fmtMoney(total);
+}
+async function submitAddCash(){
+  const entries = Object.entries(addDraft).filter(([id,v])=>v.qty>0);
+  if(!entries.length){ toast(t('enterValue'),'err'); return; }
+  for(const [id,v] of entries){
+    const d = STATE.denominations.find(x=>x.id===id);
+    const prevQty = quantityFor(id);
+    if(v.individual){
+      for(const row of v.rows){
+        await idbAdd('items', {denominationId:id, serial:row.serial||'', condition:row.condition||'general', torn:!!row.torn, active:true, createdAt:Date.now()});
+      }
+      STATE.items = await idbGetAll('items');
+    } else {
+      await upsertStock(id,'general',false,v.qty);
+    }
+    const newQty = quantityFor(id);
+    await recordTransaction({type:'ADD', denominationId:id, denomValue:d.value, cashType:d.type, quantity:v.qty, amount:v.qty*d.value, previousQty:prevQty, newQty, note:''});
+  }
+  toast(t('cashAdded'));
+  navigate('dashboard');
+}
+
+/* ============================================================
+   VIEW: DENOMINATIONS
+============================================================ */
+function renderDenominations(view){
+  const groups = [['note',t('notes')],['coin',t('coins')]];
+  view.innerHTML = `
+    <button class="btn btn-primary btn-block" id="addDenomBtn" style="margin-bottom:16px">${icon('plus',16)} ${t('addDenomination')}</button>
+    ${groups.map(([type,label])=>{
+      const ds = STATE.denominations.filter(d=>d.type===type);
+      if(!ds.length) return '';
+      return `<div class="section-title">${label}</div><div class="card" style="padding:4px 16px">
+        ${ds.map(d=>{
+          const qty = quantityFor(d.id);
+          return `<div class="list-row">
+            <div>
+              <div style="font-weight:700" class="num">${fmtMoney(d.value)} <span class="tag ${d.status==='active'?'':'coin'}" style="margin-left:4px;${d.status==='active'?'':'background:var(--danger-soft);color:var(--danger)'}">${d.status==='active'?t('active'):t('disabled')}</span></div>
+              <div class="num" style="font-size:12px;color:var(--ink-soft);margin-top:3px">${qty} ${t('pieces')} · ${fmtMoney(denomValue(d))}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <label class="switch" title="${t('advanced')}"><input type="checkbox" data-adv="${d.id}" ${d.advanced?'checked':''}><span class="track"></span></label>
+              <button class="icon-btn" data-toggle="${d.id}">${icon(d.status==='active'?'gear':'plus',16)}</button>
+              <button class="icon-btn" data-del="${d.id}">${icon('trash',16)}</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('')}
+  `;
+  document.getElementById('addDenomBtn').onclick = openAddDenomModal;
+  view.querySelectorAll('[data-adv]').forEach(cb=>cb.addEventListener('change', async (e)=>{
+    const d = STATE.denominations.find(x=>x.id===e.target.dataset.adv);
+    d.advanced = e.target.checked; await idbPut('denominations', d); toast(t('savedSuccess'));
+  }));
+  view.querySelectorAll('[data-toggle]').forEach(b=>b.addEventListener('click', async ()=>{
+    const d = STATE.denominations.find(x=>x.id===b.dataset.toggle);
+    d.status = d.status==='active' ? 'disabled' : 'active';
+    await idbPut('denominations', d); toast(t('savedSuccess')); router();
+  }));
+  view.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+    const id = b.dataset.del; const d = STATE.denominations.find(x=>x.id===id);
+    const inUse = quantityFor(id)>0 || STATE.transactions.some(t=>t.denominationId===id);
+    if(inUse){
+      const ok = await confirmDialog({title:t('confirmArchiveTitle'), body:t('confirmArchiveBody'), confirmLabel:t('disable'), danger:false});
+      if(!ok) return;
+      d.status='disabled'; await idbPut('denominations', d); toast(t('savedSuccess')); router();
+    } else {
+      const ok = await confirmDialog({title:t('confirmDeleteDenomTitle'), body:t('confirmDeleteDenomBody'), confirmLabel:t('yesDelete'), danger:true});
+      if(!ok) return;
+      await idbDelete('denominations', id);
+      STATE.denominations = STATE.denominations.filter(x=>x.id!==id);
+      toast(t('savedSuccess')); router();
+    }
+  }));
+}
+function openAddDenomModal(){
+  openModal(`
+    <div class="modal-head"><h3>${t('addDenomination')}</h3><button class="icon-btn" data-role="x">${icon('minus',16)}</button></div>
+    <div class="field"><label>${t('type')}</label><select id="ndType"><option value="note">${t('note')}</option><option value="coin">${t('coin')}</option></select></div>
+    <div class="field"><label>${t('value')}</label><input type="number" min="0.01" step="0.01" id="ndValue" placeholder="e.g. 2000"></div>
+    <label class="switch" style="margin-bottom:16px"><input type="checkbox" id="ndAdv"><span class="track"></span>${t('advanced')}</label>
+    <p class="hint" style="margin-top:-10px;margin-bottom:16px">${t('advancedModeHint')}</p>
+    <button class="btn btn-primary btn-block" id="ndSave">${t('save')}</button>
+  `,(host)=>{
+    host.querySelector('[data-role="x"]').onclick=closeModal;
+    host.querySelector('#ndSave').onclick = async ()=>{
+      const type = host.querySelector('#ndType').value;
+      const value = parseFloat(host.querySelector('#ndValue').value);
+      if(!value || value<=0){ toast(t('enterValue'),'err'); return; }
+      const exists = STATE.denominations.some(d=>d.type===type && d.value===value);
+      if(exists){ toast(t('valueExists'),'err'); return; }
+      const rec = {id:uid('den'), type, value, currency:STATE.config.iso, status:'active', advanced: host.querySelector('#ndAdv').checked, createdAt:Date.now()};
+      await idbPut('denominations', rec); STATE.denominations.push(rec);
+      closeModal(); toast(t('savedSuccess')); router();
+    };
+  });
+}
+
+/* ============================================================
+   VIEW: TRANSACTIONS
+============================================================ */
+let txnFilter = {type:'all', cashType:'all', q:''};
+function txnIcon(type){
+  if(type==='ADD') return {i:'plus', bg:'var(--primary-soft)', c:'var(--primary)'};
+  if(type==='REMOVE') return {i:'minus', bg:'var(--danger-soft)', c:'var(--danger)'};
+  if(type==='TRANSFER_IN'||type==='TRANSFER_OUT') return {i:'swap', bg:'var(--gold-soft)', c:'var(--gold)'};
+  return {i:'edit', bg:'var(--surface-2)', c:'var(--ink-soft)'};
+}
+function renderTransactions(view){
+  const types = ['all','ADD','REMOVE','TRANSFER_OUT','TRANSFER_IN','ADJUSTMENT'];
+  const filtered = STATE.transactions.filter(tx=>{
+    if(txnFilter.type!=='all' && tx.type!==txnFilter.type) return false;
+    if(txnFilter.cashType!=='all' && tx.cashType!==txnFilter.cashType) return false;
+    if(txnFilter.q){
+      const hay = `${tx.note||''} ${tx.source||''} ${tx.destination||''} ${tx.denomValue}`.toLowerCase();
+      if(!hay.includes(txnFilter.q.toLowerCase())) return false;
+    }
+    return true;
+  });
+  view.innerHTML = `
+    <input type="text" id="txnSearch" placeholder="${t('search')}" value="${escapeHtml(txnFilter.q)}"
+      style="width:100%;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;font-size:14px;margin-bottom:10px;background:var(--surface);color:var(--ink)">
+    <div class="chip-row" style="margin-bottom:6px">
+      ${types.map(ty=>`<button class="chip ${txnFilter.type===ty?'active':''}" data-ty="${ty}">${ty==='all'?t('all'):t('type_'+ty)}</button>`).join('')}
+    </div>
+    <div class="chip-row" style="margin-bottom:14px">
+      ${['all','note','coin'].map(ct=>`<button class="chip ${txnFilter.cashType===ct?'active':''}" data-ct="${ct}">${ct==='all'?t('all'):(ct==='note'?t('notes'):t('coins'))}</button>`).join('')}
+    </div>
+    ${filtered.length? filtered.map(tx=>renderTxnItem(tx)).join('') : emptyState('list', t('noTxns'), t('noTxnsDesc'))}
+  `;
+  view.querySelector('#txnSearch').addEventListener('input', (e)=>{ txnFilter.q=e.target.value; renderTransactions(view); });
+  view.querySelectorAll('[data-ty]').forEach(b=>b.addEventListener('click',()=>{ txnFilter.type=b.dataset.ty; renderTransactions(view); }));
+  view.querySelectorAll('[data-ct]').forEach(b=>b.addEventListener('click',()=>{ txnFilter.cashType=b.dataset.ct; renderTransactions(view); }));
+  view.querySelectorAll('.txn-head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+}
+function renderTxnItem(tx){
+  const ic = txnIcon(tx.type);
+  const sign = (tx.type==='ADD'||tx.type==='TRANSFER_IN') ? '+' : (tx.type==='REMOVE'||tx.type==='TRANSFER_OUT') ? '−' : (tx.amount>=0?'+':'−');
+  return `<div class="txn-item">
+    <div class="txn-head">
+      <div class="txn-ic" style="background:${ic.bg};color:${ic.c}">${icon(ic.i,17)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px">${t('type_'+tx.type)} · <span class="num">${fmtMoney(tx.denomValue)}</span></div>
+        <div style="font-size:12px;color:var(--ink-soft)">${fmtDate(tx.timestamp)}</div>
+      </div>
+      <div class="num" style="font-weight:800;color:${ic.c}">${sign}${fmtMoney(Math.abs(tx.amount))}</div>
+    </div>
+    <div class="txn-body">
+      <div class="kv"><span>${t('quantity')}</span><span class="num">${tx.quantity}</span></div>
+      <div class="kv"><span>${t('before')}</span><span class="num">${tx.previousQty}</span></div>
+      <div class="kv"><span>${t('after')}</span><span class="num">${tx.newQty}</span></div>
+      ${tx.source?`<div class="kv"><span>${t('source')}</span><span>${escapeHtml(tx.source)}</span></div>`:''}
+      ${tx.destination?`<div class="kv"><span>${t('destination')}</span><span>${escapeHtml(tx.destination)}</span></div>`:''}
+      ${tx.note?`<div class="kv"><span>${t('note_optional')}</span><span>${escapeHtml(tx.note)}</span></div>`:''}
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   VIEW: REPORTS
+============================================================ */
+function renderReports(view){
+  const notesTotal=totalByType('note'), coinsTotal=totalByType('coin');
+  let cond = {new:0,old:0,mediumOld:0,general:0,torn:0};
+  STATE.denominations.forEach(d=>{ const b=conditionBreakdown(d.id); cond.new+=b.new; cond.old+=b.old; cond.mediumOld+=b.mediumOld; cond.general+=b.general; cond.torn+=b.torn; });
+  const byDay = {};
+  STATE.transactions.forEach(tx=>{
+    if(!['ADD','REMOVE','ADJUSTMENT'].includes(tx.type)) return;
+    const key = fmtDateShort(tx.timestamp);
+    const signed = tx.type==='REMOVE' ? -tx.amount : tx.amount;
+    byDay[key] = (byDay[key]||0) + signed;
+  });
+  const days = Object.entries(byDay).slice(0,14);
+  view.innerHTML = `
+    <div class="section-title">${t('currentSummary')}</div>
+    <div class="stat-grid">
+      <div class="stat"><div class="v num">${fmtMoney(totalCash())}</div><div class="k">${t('totalCash')}</div></div>
+      <div class="stat"><div class="v num">${fmtMoney(notesTotal)}</div><div class="k">${t('notes')}</div></div>
+      <div class="stat"><div class="v num">${fmtMoney(coinsTotal)}</div><div class="k">${t('coins')}</div></div>
+      <div class="stat"><div class="v num">${STATE.denominations.length}</div><div class="k">${t('denominationsCount')}</div></div>
+    </div>
+    <div class="section-title">${t('byDenomination')}</div>
+    <div class="card scroller-x"><table class="simple"><thead><tr><th>${t('value')}</th><th>${t('type')}</th><th>${t('quantity')}</th><th>${t('totalValue')}</th></tr></thead>
+    <tbody>${STATE.denominations.map(d=>`<tr><td class="num">${fmtMoney(d.value)}</td><td>${d.type==='note'?t('note'):t('coin')}</td><td class="num">${quantityFor(d.id)}</td><td class="num">${fmtMoney(denomValue(d))}</td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft)">${t('noneYet')}</td></tr>`}</tbody></table></div>
+    <div class="section-title">${t('conditionSummary')}</div>
+    <div class="stat-grid">
+      <div class="stat"><div class="v num">${cond.general}</div><div class="k">${t('condition_general')}</div></div>
+      <div class="stat"><div class="v num">${cond.new}</div><div class="k">${t('condition_new')}</div></div>
+      <div class="stat"><div class="v num">${cond.old}</div><div class="k">${t('condition_old')}</div></div>
+      <div class="stat"><div class="v num">${cond.torn}</div><div class="k">${t('tornNotes')}</div></div>
+    </div>
+    <div class="section-title">${t('dailyChanges')}</div>
+    <div class="card scroller-x">${days.length? `<table class="simple"><tbody>${days.map(([day,amt])=>`<tr><td>${day}</td><td class="num" style="text-align:right;color:${amt>=0?'var(--success)':'var(--danger)'}">${amt>=0?'+':''}${fmtMoney(amt)}</td></tr>`).join('')}</table>` : emptyState('chart', t('noneYet'), '')}</div>
+    <div class="section-title">${t('recentActivity')} <button class="btn btn-ghost btn-sm" id="seeAllTxn">${t('nav_transactions')}</button></div>
+    ${STATE.transactions.slice(0,5).map(tx=>renderTxnItem(tx)).join('') || emptyState('list', t('noTxns'), t('noTxnsDesc'))}
+  `;
+  const seeAll = document.getElementById('seeAllTxn'); if(seeAll) seeAll.onclick=()=>navigate('transactions');
+  view.querySelectorAll('.txn-head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+}
+
+/* ============================================================
+   VIEW: SETTINGS
+============================================================ */
+function renderSettings(view){
+  const c = STATE.config, b = STATE.branding;
+  view.innerHTML = `
+    <div class="section-title">${t('language')}</div>
+    <div class="card" style="display:flex;gap:10px">
+      <button class="chip ${c.lang==='en'?'active':''}" data-lang="en" style="flex:1;text-align:center">English</button>
+      <button class="chip ${c.lang==='bn'?'active':''}" data-lang="bn" style="flex:1;text-align:center">বাংলা</button>
+    </div>
+
+    <div class="section-title">${t('theme')}</div>
+    <div class="card" style="display:flex;gap:10px">
+      <button class="chip ${c.theme==='light'?'active':''}" data-theme-opt="light" style="flex:1;text-align:center">${t('light')}</button>
+      <button class="chip ${c.theme==='dark'?'active':''}" data-theme-opt="dark" style="flex:1;text-align:center">${t('dark')}</button>
+    </div>
+
+    <div class="section-title">${t('currencyConfig')}</div>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>${t('country')}</label><input type="text" id="cfCountry" value="${escapeHtml(c.country)}"></div>
+        <div class="field"><label>${t('currencyName')}</label><input type="text" id="cfName" value="${escapeHtml(c.currencyName)}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>${t('shortName')}</label><input type="text" id="cfShort" value="${escapeHtml(c.shortName)}"></div>
+        <div class="field"><label>${t('isoCode')}</label><input type="text" id="cfIso" value="${escapeHtml(c.iso)}"></div>
+      </div>
+      <div class="field"><label>${t('symbol')}</label><input type="text" id="cfSymbol" value="${escapeHtml(c.symbol)}"></div>
+      <button class="btn btn-primary btn-block" id="cfSave">${t('save')}</button>
+    </div>
+
+    <div class="section-title">${t('denomManage')}</div>
+    <div class="card link-row" style="border:0;cursor:pointer" id="goDenoms">
+      <div class="ic">${icon('layers',18)}</div>
+      <div style="flex:1">${t('denomManage')}</div>
+      ${icon('chevron',18)}
+    </div>
+
+    <div class="section-title">${t('branding')}</div>
+    <div class="card" style="display:flex;gap:14px;align-items:center">
+      ${b.photo? `<img src="${b.photo}" class="avatar" alt="">` : `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--surface-2)">${icon('user',28)}</div>`}
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;width:fit-content">${icon('camera',14)} ${t('uploadPhoto')}<input type="file" accept="image/*" id="photoInput" style="display:none"></label>
+        ${b.photo?`<button class="btn btn-ghost btn-sm" id="removePhoto" style="width:fit-content">${t('removePhoto')}</button>`:''}
+        <span class="hint">${t('photoNote')}</span>
+      </div>
+    </div>
+
+    <div class="section-title">${t('dataManagement')}</div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-ghost btn-block" id="exportBtn">${t('exportBackup')}</button>
+      <label class="btn btn-ghost btn-block" style="cursor:pointer">${t('importBackup')}<input type="file" accept="application/json" id="importInput" style="display:none"></label>
+      <button class="btn btn-danger btn-block" id="clearBtn">${t('clearAllData')}</button>
+    </div>
+
+    <div class="section-title">${t('aboutApp')}</div>
+    <div class="card link-row" style="border:0;cursor:pointer" id="goAbout">
+      <div class="ic">${icon('user',18)}</div>
+      <div style="flex:1">${t('aboutApp')}</div>
+      ${icon('chevron',18)}
+    </div>
+  `;
+  view.querySelectorAll('[data-lang]').forEach(b=>b.onclick=async ()=>{ STATE.config.lang=b.dataset.lang; await saveConfig(); fullRerender(); });
+  view.querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=async ()=>{ STATE.config.theme=b.dataset.themeOpt; document.documentElement.setAttribute('data-theme',STATE.config.theme); await saveConfig(); renderSettings(view); });
+  document.getElementById('cfSave').onclick = async ()=>{
+    STATE.config.country = document.getElementById('cfCountry').value.trim() || STATE.config.country;
+    STATE.config.currencyName = document.getElementById('cfName').value.trim() || STATE.config.currencyName;
+    STATE.config.shortName = document.getElementById('cfShort').value.trim() || STATE.config.shortName;
+    STATE.config.iso = document.getElementById('cfIso').value.trim() || STATE.config.iso;
+    STATE.config.symbol = document.getElementById('cfSymbol').value.trim() || STATE.config.symbol;
+    await saveConfig(); toast(t('savedSuccess')); fullRerender();
+  };
+  document.getElementById('goDenoms').onclick=()=>navigate('denominations');
+  document.getElementById('goAbout').onclick=()=>navigate('about');
+  document.getElementById('photoInput').addEventListener('change', handlePhotoUpload);
+  const rp = document.getElementById('removePhoto'); if(rp) rp.onclick = async ()=>{ STATE.branding.photo=null; await saveBranding(); renderSettings(view); };
+  document.getElementById('exportBtn').onclick = exportBackup;
+  document.getElementById('importInput').addEventListener('change', importBackup);
+  document.getElementById('clearBtn').onclick = clearAllData;
+}
+function handlePhotoUpload(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const img = new Image();
+    img.onload = async ()=>{
+      const max = 480;
+      let w=img.width, h=img.height;
+      if(w>h && w>max){ h=Math.round(h*max/w); w=max; } else if(h>=w && h>max){ w=Math.round(w*max/h); h=max; }
+      const canvas = document.createElement('canvas'); canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      STATE.branding.photo = canvas.toDataURL('image/jpeg', 0.85);
+      await saveBranding(); router();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+async function exportBackup(){
+  const payload = { version:1, exportedAt:Date.now(), config:STATE.config, branding:{key:'branding',photo:null}, denominations:STATE.denominations, stock:STATE.stock, items:STATE.items, transactions:STATE.transactions };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date(); const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  a.href = url; a.download = `cash-manager-backup-${stamp}.json`; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast(t('backupExported'));
+}
+function importBackup(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev)=>{
+    try{
+      const data = JSON.parse(ev.target.result);
+      if(!data || !Array.isArray(data.denominations) || !Array.isArray(data.stock) || !Array.isArray(data.items) || !Array.isArray(data.transactions)){
+        toast(t('backupInvalid'),'err'); return;
+      }
+      const ok = await confirmDialog({title:t('importBackup'), body:t('confirmClearBody'), confirmLabel:t('save'), danger:true});
+      if(!ok) return;
+      await idbClear('denominations'); await idbClear('stock'); await idbClear('items'); await idbClear('transactions');
+      for(const d of data.denominations) await idbPut('denominations', d);
+      for(const s of data.stock) await idbPut('stock', s);
+      for(const i of data.items) await idbAdd('items', {...i, id:undefined}).catch(()=>idbPut('items',i));
+      for(const tr of data.transactions) await idbAdd('transactions', {...tr, id:undefined}).catch(()=>idbPut('transactions',tr));
+      if(data.config) { STATE.config = {...STATE.config, ...data.config}; await saveConfig(); }
+      await loadState();
+      toast(t('backupImported')); fullRerender();
+    }catch(err){ toast(t('backupInvalid'),'err'); }
+  };
+  reader.readAsText(file);
+}
+async function clearAllData(){
+  const ok = await confirmDialog({title:t('confirmClearTitle'), body:t('confirmClearBody'), confirmLabel:t('yesClear'), danger:true});
+  if(!ok) return;
+  await idbClear('denominations'); await idbClear('stock'); await idbClear('items'); await idbClear('transactions');
+  await seedDefaultsIfNeeded();
+  await loadState();
+  toast(t('dataCleared')); fullRerender();
+}
+
+/* ============================================================
+   VIEW: ABOUT
+============================================================ */
+function renderAbout(view){
+  const b = STATE.branding;
+  view.innerHTML = `
+    <div class="card" style="text-align:center;padding:26px 18px">
+      <div class="mark" style="width:56px;height:56px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:#fff">${icon('wallet',26)}</div>
+      <h2 style="font-size:19px">${t('appName')}</h2>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin-top:8px;line-height:1.6">${t('aboutDesc')}</p>
+    </div>
+    <div class="section-title">${t('createdBy')}</div>
+    <div class="card" style="text-align:center;padding:22px 18px">
+      ${b.photo? `<img src="${b.photo}" class="avatar" style="width:84px;height:84px;margin:0 auto" alt="">` : `<div class="avatar" style="width:84px;height:84px;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--surface-2)">${icon('user',34)}</div>`}
+      <h3 style="margin-top:14px;font-size:16px">MD. IKRAMUL ISLAM SIDDIQUE POROSH</h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:2px">${t('seniorEngineer')}</p>
+      <div style="margin-top:16px;text-align:left">
+        <a class="link-row" href="tel:+8801672896992"><div class="ic">${icon('user',16)}</div><div style="flex:1"><div style="font-size:12px;color:var(--ink-soft)">${t('phone')}</div>+8801672896992</div></a>
+        <a class="link-row" href="https://rjporosh.github.io" target="_blank" rel="noopener"><div class="ic">${icon('chart',16)}</div><div style="flex:1"><div style="font-size:12px;color:var(--ink-soft)">${t('portfolio')}</div>rjporosh.github.io</div></a>
+        <a class="link-row" href="https://YouTube.com/@mdikramulislamsiddiqueporosh" target="_blank" rel="noopener"><div class="ic">${icon('list',16)}</div><div style="flex:1"><div style="font-size:12px;color:var(--ink-soft)">${t('youtube')}</div>@mdikramulislamsiddiqueporosh</div></a>
+        <a class="link-row" href="https://www.linkedin.com/in/md-ikramul-islam-siddique-porosh-4393b333a" target="_blank" rel="noopener" style="border-bottom:0"><div class="ic">${icon('layers',16)}</div><div style="flex:1"><div style="font-size:12px;color:var(--ink-soft)">${t('linkedin')}</div>md-ikramul-islam-siddique-porosh</div></a>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   BOOT
+============================================================ */
+function fullRerender(){ renderNav(); router(); }
+async function boot(){
+  try{
+    await idbOpen();
+    await seedDefaultsIfNeeded();
+    await loadState();
+  }catch(err){
+    console.error(err);
+    toast('Storage unavailable in this browser.', 'err');
+  }
+  if(!location.hash) location.hash = '#/dashboard';
+  document.getElementById('themeToggle').addEventListener('click', async ()=>{
+    STATE.config.theme = STATE.config.theme==='dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', STATE.config.theme);
+    await saveConfig();
+  });
+  document.getElementById('fabAdd').addEventListener('click', ()=>navigate('add'));
+  router();
+  const minSplash = new Promise(r=>setTimeout(r, 1100));
+  await minSplash;
+  document.getElementById('splash').classList.add('hide');
+  document.getElementById('app').hidden = false;
+}
+boot();
+
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./service-worker.js').catch(()=>{ /* offline-first core still works without this */ });
+  });
+}
+</script>
+</body>
+</html>
